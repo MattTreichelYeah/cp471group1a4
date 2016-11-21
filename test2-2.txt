@@ -1,0 +1,10 @@
+int a,b,r;
+a=21; b=15;
+while (b <> 0) do
+	if (a > b) then 
+		a = a - b;
+	else 
+		b = b - a;
+	fi;
+od;
+print(a);print(b).
