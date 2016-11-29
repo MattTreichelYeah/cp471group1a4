@@ -1,3 +1,6 @@
 int x,i;
 x=0;i=1;
-print(x);.
+x=x+i*i;
+i=i+1;
+print(x);
+print(i);.

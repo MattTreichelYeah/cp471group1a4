@@ -8,7 +8,9 @@ public class ClassFile implements Constants {
   private InstructionFactory _factory;
   private ConstantPoolGen    _cp;
   private ClassGen           _cg;
-  private List<InstructionHandle> InstructionHandles = new ArrayList<InstructionHandle>();
+  private int registers = 1;
+  private List<BranchInstruction> BranchInstructions = new ArrayList<BranchInstruction>();
+  private Hashtable symbolTable = new Hashtable();
 
   public ClassFile() {
     _cg = new ClassGen("test", "java.lang.Object", "test.java", ACC_PUBLIC | ACC_SUPER, new String[] {  });
@@ -50,18 +52,7 @@ public class ClassFile implements Constants {
 	SyntaxTreeNode.Interior statements = (SyntaxTreeNode.Interior) treeList.getFirst();
 	
 	for (int i = 0; i < statements.numChildren(); i++) {
-		SyntaxTreeNode.Interior statement = (SyntaxTreeNode.Interior) statements.getChild(i);
-		
-		if (statement.toString().equals("=")) {
-		    InstructionHandles.add(il.append(new PUSH(_cp, Integer.valueOf(statement.getChild(1).toString()))));
-		    il.append(_factory.createStore(Type.INT, InstructionHandles.size()));
-		}
-		
-		if (statement.toString().equals("print")) {
-			InstructionHandles.add(il.append(_factory.createFieldAccess("java.lang.System", "out", new ObjectType("java.io.PrintStream"), Constants.GETSTATIC)));
-		    il.append(_factory.createLoad(Type.INT, 2));
-		    il.append(_factory.createInvoke("java.io.PrintStream", "println", Type.VOID, new Type[] { Type.INT }, Constants.INVOKEVIRTUAL));
-		}
+		process(statements.getChild(i), il);
 	}
 
     il.append(_factory.createReturn(Type.VOID));
@@ -73,6 +64,85 @@ public class ClassFile implements Constants {
     
     il.dispose();
   }
+  
+  private void process(SyntaxTreeNode statement, InstructionList il) {
+	  
+	if (statement.toString().equals("=")) {
+		SyntaxTreeNode.Interior interior = (SyntaxTreeNode.Interior) statement;
+		// Process Right Side
+		process(interior.getChild(1), il);
+		// Process Left Side
+		if (!symbolTable.containsKey(interior.getChild(0).toString())) {
+			symbolTable.put(interior.getChild(0).toString(), registers);
+			il.append(_factory.createStore(Type.INT, registers));
+			registers += 1;
+		} else {
+			int var = (int)symbolTable.get(interior.getChild(0).toString());
+			il.append(_factory.createStore(Type.INT, var));
+		}
+	}
+	
+	else if (statement.toString().equals("while")) {
+		SyntaxTreeNode.Interior interior = (SyntaxTreeNode.Interior) statement;
+	    BranchInstruction go_to = _factory.createBranchInstruction(Constants.GOTO, null);
+	    il.append(go_to);
+	    int bodyTarget = il.size();
+	    process(interior.getChild(1), il); // Loop Body
+		int go_toTarget = il.size(); // ie. the first condition instruction
+	    process(interior.getChild(0), il); // Condition
+		BranchInstructions.add(_factory.createBranchInstruction(Constants.IF_ICMPLT, il.findHandle(bodyTarget)));
+		il.append(BranchInstructions.get(BranchInstructions.size() - 1));
+	    go_to.setTarget(il.findHandle(go_toTarget));
+	}
+	
+	else if (statement.toString().equals("<")) {
+		SyntaxTreeNode.Interior interior = (SyntaxTreeNode.Interior) statement;
+		process(interior.getChild(0), il);
+		process(interior.getChild(1), il);
+	}
+	
+	else if (statement.toString().equals("+")) {
+		SyntaxTreeNode.Interior interior = (SyntaxTreeNode.Interior) statement;
+		process(interior.getChild(0), il);
+		process(interior.getChild(1), il);
+		il.append(InstructionConstants.IADD);
+	}
+	
+	else if (statement.toString().equals("*")) {
+		SyntaxTreeNode.Interior interior = (SyntaxTreeNode.Interior) statement;
+		process(interior.getChild(0), il);
+		process(interior.getChild(1), il);
+		il.append(InstructionConstants.IMUL);
+	}
+	
+	else if (statement.toString().equals("print")) {
+		SyntaxTreeNode.Interior interior = (SyntaxTreeNode.Interior) statement;
+		int var = (int)symbolTable.get(interior.getChild(0).toString());
+		il.append(_factory.createFieldAccess("java.lang.System", "out", new ObjectType("java.io.PrintStream"), Constants.GETSTATIC));
+		il.append(_factory.createLoad(Type.INT, var));
+	    il.append(_factory.createInvoke("java.io.PrintStream", "println", Type.VOID, new Type[] { Type.INT }, Constants.INVOKEVIRTUAL));
+	}
+	
+	else { // Leaf Nodes: ie. Constants & Variables
+		Object value = resolve(statement);
+		if (value instanceof Integer) {
+			il.append(new PUSH(_cp, (int)value));
+		} else if (value instanceof String) {
+			int var = (int)symbolTable.get(value);
+			il.append(_factory.createLoad(Type.INT, var));
+		}
+	}
+  }
+  
+	public Object resolve(SyntaxTreeNode node) {
+		Object value;
+		if (node.getValue() instanceof SymbolTableEntry) {
+			value = node.toString();
+		} else {
+			value = (Object)node.getValue();
+		}
+		return value;
+	}
 
   public static void main(String[] args) throws Exception {
     ClassFile creator = new ClassFile();
