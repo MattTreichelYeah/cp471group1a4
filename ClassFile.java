@@ -10,8 +10,12 @@ public class ClassFile implements Constants {
   private ClassGen           _cg;
   private boolean go_toFlag = false;
   private boolean bodyFlag = false;
+  private boolean ifFlag = false;
+  private boolean ifFlag2 = false;
+  private boolean elseFlag = false;
   private InstructionHandle go_toTarget = null;
   private InstructionHandle bodyTarget = null;
+  private InstructionHandle printTarget = null;
   private int registers = 1;
   private List<BranchInstruction> BranchInstructions = new ArrayList<BranchInstruction>();
   private Hashtable symbolTable = new Hashtable();
@@ -71,6 +75,10 @@ public class ClassFile implements Constants {
   
   private void process(SyntaxTreeNode statement, InstructionList il) {
 
+	if (ifFlag) {
+		ifFlag2 = true;
+	}
+	  
 	if (statement.toString().equals("=")) {
 		SyntaxTreeNode.Interior interior = (SyntaxTreeNode.Interior) statement;
 		// Process Right Side
@@ -99,8 +107,34 @@ public class ClassFile implements Constants {
 		go_toFlag = true; // For grabbing goto target
 	    process(interior.getChild(0), il); // Condition
 	    
-		il.append(BranchInstructions.get(BranchInstructions.size() - 1));
 	    go_to.setTarget(go_toTarget);
+	}
+	
+	else if (statement.toString().equals("if")) {
+		SyntaxTreeNode.Interior interior = (SyntaxTreeNode.Interior) statement;
+		SyntaxTreeNode.Interior body1 = (SyntaxTreeNode.Interior) interior.getChild(1);
+		SyntaxTreeNode.Interior body2 = null;
+		if (interior.numChildren() == 3) {
+			body2 = (SyntaxTreeNode.Interior) interior.getChild(2);
+		}
+	    
+	    process(interior.getChild(0), il); // Condition
+	    
+		for (int i = 0; i < body1.numChildren(); i++) {
+			process(body1.getChild(i), il); // Body
+		}
+		
+		BranchInstructions.add(_factory.createBranchInstruction(Constants.GOTO, null));
+	    il.append(BranchInstructions.get(BranchInstructions.size() - 1));
+	    
+		if (body2 != null) {
+			elseFlag = true;
+			for (int i = 0; i < body2.numChildren(); i++) {
+				process(body2.getChild(i), il); // Body Else
+			}	
+		}
+
+	    ifFlag = true;
 	}
 	
 	else if (statement.toString().equals("<")) {
@@ -108,6 +142,7 @@ public class ClassFile implements Constants {
 		process(interior.getChild(0), il);
 		process(interior.getChild(1), il);
 		BranchInstructions.add(_factory.createBranchInstruction(Constants.IF_ICMPLT, bodyTarget));
+		il.append(BranchInstructions.get(BranchInstructions.size() - 1));
 	}
 	
 	else if (statement.toString().equals(">")) {
@@ -115,6 +150,7 @@ public class ClassFile implements Constants {
 		process(interior.getChild(0), il);
 		process(interior.getChild(1), il);
 		BranchInstructions.add(_factory.createBranchInstruction(Constants.IF_ICMPGT, bodyTarget));
+		il.append(BranchInstructions.get(BranchInstructions.size() - 1));
 	}
 	
 	else if (statement.toString().equals("<=")) {
@@ -122,6 +158,8 @@ public class ClassFile implements Constants {
 		process(interior.getChild(0), il);
 		process(interior.getChild(1), il);
 		BranchInstructions.add(_factory.createBranchInstruction(Constants.IF_ICMPLE, bodyTarget));
+		il.append(BranchInstructions.get(BranchInstructions.size() - 1));
+		
 	}
 	
 	else if (statement.toString().equals(">=")) {
@@ -129,6 +167,7 @@ public class ClassFile implements Constants {
 		process(interior.getChild(0), il);
 		process(interior.getChild(1), il);
 		BranchInstructions.add(_factory.createBranchInstruction(Constants.IF_ICMPGE, bodyTarget));
+		il.append(BranchInstructions.get(BranchInstructions.size() - 1));
 	}	
 	
 	else if (statement.toString().equals("==")) {
@@ -136,6 +175,7 @@ public class ClassFile implements Constants {
 		process(interior.getChild(0), il);
 		process(interior.getChild(1), il);
 		BranchInstructions.add(_factory.createBranchInstruction(Constants.IF_ICMPEQ, bodyTarget));
+		il.append(BranchInstructions.get(BranchInstructions.size() - 1));
 	}
 
 	else if (statement.toString().equals("<>")) {
@@ -143,6 +183,7 @@ public class ClassFile implements Constants {
 		process(interior.getChild(0), il);
 		process(interior.getChild(1), il);
 		BranchInstructions.add(_factory.createBranchInstruction(Constants.IF_ICMPNE, bodyTarget));
+		il.append(BranchInstructions.get(BranchInstructions.size() - 1));
 	}
 	
 	else if (statement.toString().equals("+")) {
@@ -184,6 +225,7 @@ public class ClassFile implements Constants {
 		SyntaxTreeNode.Interior interior = (SyntaxTreeNode.Interior) statement;
 		int var = (int)symbolTable.get(interior.getChild(0).toString());
 		il.append(_factory.createFieldAccess("java.lang.System", "out", new ObjectType("java.io.PrintStream"), Constants.GETSTATIC));
+		printTarget = il.getEnd();
 		il.append(_factory.createLoad(Type.INT, var));
 	    il.append(_factory.createInvoke("java.io.PrintStream", "println", Type.VOID, new Type[] { Type.INT }, Constants.INVOKEVIRTUAL));
 	}
@@ -199,14 +241,28 @@ public class ClassFile implements Constants {
 	}
 	
 	
-    if (bodyFlag)  {
+    if (bodyFlag)  { // for while backpatching
     	bodyTarget = il.getEnd(); // ie. the first body instruction
     	bodyFlag = false;
     }
-	if (go_toFlag) {
+	if (go_toFlag) { // for while backpatching
 		go_toTarget = il.getEnd(); // ie. the first condition instruction
 		go_toFlag = false;
 	}
+	if (ifFlag && ifFlag2) { // for if backpatching
+		if (printTarget == null) {
+			BranchInstructions.get(BranchInstructions.size() - 1).setTarget(il.getEnd());
+		} else {
+			BranchInstructions.get(BranchInstructions.size() - 1).setTarget(printTarget);
+		}
+	    ifFlag = false;
+	    ifFlag2 = false;
+	}
+	if (elseFlag) { // for else backpatching
+		BranchInstructions.get(BranchInstructions.size() - 2).setTarget(il.getEnd());
+	    elseFlag = false;
+	}
+	printTarget = null;
   }
   
   public void ilappend(InstructionList il, InstructionHandle ih) {
