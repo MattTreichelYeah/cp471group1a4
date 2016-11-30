@@ -66,7 +66,7 @@ public class ClassFile implements Constants {
   }
   
   private void process(SyntaxTreeNode statement, InstructionList il) {
-	  
+
 	if (statement.toString().equals("=")) {
 		SyntaxTreeNode.Interior interior = (SyntaxTreeNode.Interior) statement;
 		// Process Right Side
@@ -84,15 +84,20 @@ public class ClassFile implements Constants {
 	
 	else if (statement.toString().equals("while")) {
 		SyntaxTreeNode.Interior interior = (SyntaxTreeNode.Interior) statement;
+		SyntaxTreeNode.Interior body = (SyntaxTreeNode.Interior) interior.getChild(1);
 	    BranchInstruction go_to = _factory.createBranchInstruction(Constants.GOTO, null);
 	    il.append(go_to);
-	    int bodyTarget = il.size();
-	    process(interior.getChild(1), il); // Loop Body
-		int go_toTarget = il.size(); // ie. the first condition instruction
+	    
+	    InstructionHandle bodyTarget = il.getEnd(); // ie. the first body instruction
+		for (int i = 0; i < body.numChildren(); i++) {
+			process(body.getChild(i), il); // Body
+		}	
+		InstructionHandle go_toTarget = il.getEnd(); // ie. the first condition instruction
 	    process(interior.getChild(0), il); // Condition
-		BranchInstructions.add(_factory.createBranchInstruction(Constants.IF_ICMPLT, il.findHandle(bodyTarget)));
+	    
+		BranchInstructions.add(_factory.createBranchInstruction(Constants.IF_ICMPLT, bodyTarget));
 		il.append(BranchInstructions.get(BranchInstructions.size() - 1));
-	    go_to.setTarget(il.findHandle(go_toTarget));
+	    go_to.setTarget(go_toTarget);
 	}
 	
 	else if (statement.toString().equals("<")) {
