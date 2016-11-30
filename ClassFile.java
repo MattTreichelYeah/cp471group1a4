@@ -8,6 +8,10 @@ public class ClassFile implements Constants {
   private InstructionFactory _factory;
   private ConstantPoolGen    _cp;
   private ClassGen           _cg;
+  private boolean go_toFlag = false;
+  private boolean bodyFlag = false;
+  private InstructionHandle go_toTarget = null;
+  private InstructionHandle bodyTarget = null;
   private int registers = 1;
   private List<BranchInstruction> BranchInstructions = new ArrayList<BranchInstruction>();
   private Hashtable symbolTable = new Hashtable();
@@ -88,19 +92,25 @@ public class ClassFile implements Constants {
 	    BranchInstruction go_to = _factory.createBranchInstruction(Constants.GOTO, null);
 	    il.append(go_to);
 	    
-	    InstructionHandle bodyTarget = il.getEnd(); // ie. the first body instruction
+	    bodyFlag = true;
 		for (int i = 0; i < body.numChildren(); i++) {
 			process(body.getChild(i), il); // Body
 		}	
-		InstructionHandle go_toTarget = il.getEnd(); // ie. the first condition instruction
+		go_toFlag = true;
 	    process(interior.getChild(0), il); // Condition
 	    
-		BranchInstructions.add(_factory.createBranchInstruction(Constants.IF_ICMPLT, bodyTarget));
 		il.append(BranchInstructions.get(BranchInstructions.size() - 1));
 	    go_to.setTarget(go_toTarget);
 	}
 	
 	else if (statement.toString().equals("<")) {
+		SyntaxTreeNode.Interior interior = (SyntaxTreeNode.Interior) statement;
+		process(interior.getChild(0), il);
+		process(interior.getChild(1), il);
+		BranchInstructions.add(_factory.createBranchInstruction(Constants.IF_ICMPLT, bodyTarget));
+	}
+	
+	else if (statement.toString().equals("<>")) {
 		SyntaxTreeNode.Interior interior = (SyntaxTreeNode.Interior) statement;
 		process(interior.getChild(0), il);
 		process(interior.getChild(1), il);
@@ -120,6 +130,13 @@ public class ClassFile implements Constants {
 		il.append(InstructionConstants.IMUL);
 	}
 	
+	else if (statement.toString().equals("%")) {
+		SyntaxTreeNode.Interior interior = (SyntaxTreeNode.Interior) statement;
+		process(interior.getChild(0), il);
+		process(interior.getChild(1), il);
+		il.append(InstructionConstants.IREM);
+	}	
+	
 	else if (statement.toString().equals("print")) {
 		SyntaxTreeNode.Interior interior = (SyntaxTreeNode.Interior) statement;
 		int var = (int)symbolTable.get(interior.getChild(0).toString());
@@ -137,6 +154,20 @@ public class ClassFile implements Constants {
 			il.append(_factory.createLoad(Type.INT, var));
 		}
 	}
+	
+	
+    if (bodyFlag)  {
+    	bodyTarget = il.getEnd(); // ie. the first body instruction
+    	bodyFlag = false;
+    }
+	if (go_toFlag) {
+		go_toTarget = il.getEnd(); // ie. the first condition instruction
+		go_toFlag = false;
+	}
+  }
+  
+  public void ilappend(InstructionList il, InstructionHandle ih) {
+	  
   }
   
 	public Object resolve(SyntaxTreeNode node) {
