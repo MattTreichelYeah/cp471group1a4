@@ -92,11 +92,11 @@ public class ClassFile implements Constants {
 	    BranchInstruction go_to = _factory.createBranchInstruction(Constants.GOTO, null);
 	    il.append(go_to);
 	    
-	    bodyFlag = true;
+	    bodyFlag = true; // For grabbing backtrack target
 		for (int i = 0; i < body.numChildren(); i++) {
 			process(body.getChild(i), il); // Body
 		}	
-		go_toFlag = true;
+		go_toFlag = true; // For grabbing goto target
 	    process(interior.getChild(0), il); // Condition
 	    
 		il.append(BranchInstructions.get(BranchInstructions.size() - 1));
@@ -110,10 +110,39 @@ public class ClassFile implements Constants {
 		BranchInstructions.add(_factory.createBranchInstruction(Constants.IF_ICMPLT, bodyTarget));
 	}
 	
+	else if (statement.toString().equals(">")) {
+		SyntaxTreeNode.Interior interior = (SyntaxTreeNode.Interior) statement;
+		process(interior.getChild(0), il);
+		process(interior.getChild(1), il);
+		BranchInstructions.add(_factory.createBranchInstruction(Constants.IF_ICMPGT, bodyTarget));
+	}
+	
+	else if (statement.toString().equals("<=")) {
+		SyntaxTreeNode.Interior interior = (SyntaxTreeNode.Interior) statement;
+		process(interior.getChild(0), il);
+		process(interior.getChild(1), il);
+		BranchInstructions.add(_factory.createBranchInstruction(Constants.IF_ICMPLE, bodyTarget));
+	}
+	
+	else if (statement.toString().equals(">=")) {
+		SyntaxTreeNode.Interior interior = (SyntaxTreeNode.Interior) statement;
+		process(interior.getChild(0), il);
+		process(interior.getChild(1), il);
+		BranchInstructions.add(_factory.createBranchInstruction(Constants.IF_ICMPGE, bodyTarget));
+	}	
+	
+	else if (statement.toString().equals("==")) {
+		SyntaxTreeNode.Interior interior = (SyntaxTreeNode.Interior) statement;
+		process(interior.getChild(0), il);
+		process(interior.getChild(1), il);
+		BranchInstructions.add(_factory.createBranchInstruction(Constants.IF_ICMPEQ, bodyTarget));
+	}
+
 	else if (statement.toString().equals("<>")) {
 		SyntaxTreeNode.Interior interior = (SyntaxTreeNode.Interior) statement;
 		process(interior.getChild(0), il);
 		process(interior.getChild(1), il);
+		BranchInstructions.add(_factory.createBranchInstruction(Constants.IF_ICMPNE, bodyTarget));
 	}
 	
 	else if (statement.toString().equals("+")) {
@@ -123,17 +152,31 @@ public class ClassFile implements Constants {
 		il.append(InstructionConstants.IADD);
 	}
 	
-	else if (statement.toString().equals("*")) {
+	else if (statement.toString().equals("-")) {
 		SyntaxTreeNode.Interior interior = (SyntaxTreeNode.Interior) statement;
 		process(interior.getChild(0), il);
 		process(interior.getChild(1), il);
+		il.append(InstructionConstants.ISUB);
+	}
+	
+	else if (statement.toString().equals("*")) {
+		SyntaxTreeNode.Interior interior = (SyntaxTreeNode.Interior) statement;
+		process(interior.getChild(1), il);
+		process(interior.getChild(0), il);
 		il.append(InstructionConstants.IMUL);
+	}
+	
+	else if (statement.toString().equals("/")) {
+		SyntaxTreeNode.Interior interior = (SyntaxTreeNode.Interior) statement;
+		process(interior.getChild(1), il);
+		process(interior.getChild(0), il);
+		il.append(InstructionConstants.IDIV);
 	}
 	
 	else if (statement.toString().equals("%")) {
 		SyntaxTreeNode.Interior interior = (SyntaxTreeNode.Interior) statement;
-		process(interior.getChild(0), il);
 		process(interior.getChild(1), il);
+		process(interior.getChild(0), il);
 		il.append(InstructionConstants.IREM);
 	}	
 	
